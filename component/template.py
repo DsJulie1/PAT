@@ -28,7 +28,6 @@ def register_template(template_name, system_format, user_format, assistant_forma
     )
 
 
-# 注册template
 register_template(
     template_name='default',
     system_format='System: {content}\n\n',
@@ -96,7 +95,6 @@ register_template(
     stop_word='<｜end▁of▁sentence｜>'
 )
 
-# todo 更优雅的实现方式
 register_template(
     template_name='chatglm2',
     system_format=None,

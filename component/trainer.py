@@ -30,7 +30,7 @@ SCALER_NAME = "scaler.pt"
 
 class Trainer(transformers.Trainer):
     """
-    主要修改逻辑：通过传入compute_loss，支持自定义loss计算方式
+    Main modification logic: supports custom loss computation by passing in compute_loss
     """
     def __init__(
             self,
@@ -64,7 +64,7 @@ class Trainer(transformers.Trainer):
 
     def compute_loss(self, model, inputs, return_outputs=False):
         """
-        重写loss的计算方式
+        Rewrite the loss computation method:
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
         Subclass and override for custom behavior.
@@ -78,7 +78,7 @@ class Trainer(transformers.Trainer):
 
 class LoRATrainer(Trainer):
     """
-    修改checkkpoint的保存逻辑，只保存lora
+    Modify the checkpoint saving logic: only save LoRA parameters.
     """
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.

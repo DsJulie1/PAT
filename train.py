@@ -43,10 +43,10 @@ import time
 def setup_everything():
     parser = argparse.ArgumentParser()
     # parser.add_argument("--train_args_file", type=str, default='train_args/pretrain/full/bloom-1b1-pretrain-full.json', help="")
-    parser.add_argument("--train_args_file", type=str, default='train_args/sft/qlora/qwen-7b-sft-qlora.json', help="")
+    parser.add_argument("--train_args_file", type=str, default='train_args/sft/qlora/qwen-7b-sft-qlora.json', help="path to training arguments json")
     parser.add_argument("--local_rank", type=int, help="")
 
-    parser.add_argument("--ft_mode", type=str, choices=["none", "dimdown"], help="")
+    parser.add_argument("--ft_mode", type=str, choices=["none", "dimdown"], help="fine-tuning mode")
     parser.add_argument("--global_step", type=int, help="")
     parser.add_argument("--dimdown_dim", type=int, help="")
     parser.add_argument("--trainable_mask", action="store_true", help="set mask trainable with sigmoid regularizer")
@@ -69,11 +69,8 @@ def setup_everything():
             },fp,indent=4
         )
     train_args_file = args.train_args_file
-    # 读取训练的参数配置
     parser = HfArgumentParser((CustomizedArguments, TrainingArguments))
-    # 解析得到自定义参数，以及自带参数
     args, training_args = parser.parse_json_file(json_file=train_args_file)
-    # 创建输出目录
     current_time = time.localtime()
     formatted_time = time.strftime("%y%m%d_%H%M%S", current_time)
     last_folder = training_args.output_dir.split("/")[-1]
@@ -85,13 +82,13 @@ def setup_everything():
         os.makedirs(training_args.output_dir)
     logger.add(join(training_args.output_dir, 'train.log'))
     # logger.info("train_args:{}".format(training_args))
-    # 加载训练配置文件
+
     with open(train_args_file, "r") as f:
         train_args = json.load(f)
-    # 保存训练参数到输出目录
+
     with open(join(training_args.output_dir, 'train_args.json'), "w") as f:
         json.dump(train_args, f, indent=4)
-    # 设置随机种子
+
     set_seed(training_args.seed)
 
     # check some setting
@@ -104,7 +101,7 @@ def setup_everything():
 
 def find_all_linear_names(model, train_mode):
     """
-    找出所有全连接层，为所有全连接添加adapter
+    Find all linear (fully-connected) layers to which adapters (LoRA, QLoRA, DoRA) should be applied.
     """
     assert train_mode in ['lora', 'qlora','dora']
     cls = bnb.nn.Linear4bit if train_mode == 'qlora' else nn.Linear
@@ -125,7 +122,7 @@ def find_all_linear_names(model, train_mode):
 
 def load_pretrain_dataset(training_args, args, tokenizer):
     """
-    多线程预处理预训练数据
+    Load and preprocess pretraining dataset with multi-threaded tokenization and chunking.
     """
     def tokenize_function(examples):
         output = tokenizer(examples["text"])
@@ -217,15 +214,12 @@ def load_pretrain_dataset(training_args, args, tokenizer):
 
 def load_tokenizer(args):
     config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-    # 加载tokenzier
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
         trust_remote_code=True,
-        # llama不支持fast
         use_fast=False if config.model_type == 'llama' or config.model_type == 'internlm2' else True
     )
 
-    # 部分模型的base与chat版本的tokenizer存在差异
     if 'internlm2' in args.model_name_or_path.lower():
         tokenizer._added_tokens_encoder.update({'<|im_start|>': 92543})
         tokenizer._added_tokens_encoder.update({'<|im_end|>': 92542})
@@ -254,10 +248,8 @@ def load_model(args, training_args, cmd_args):
     logger.info(f'Loading model from base model: {args.model_name_or_path}')
     logger.info(f'Train model with {args.train_mode}')
 
-    # init model kwargs
-    # todo add flash attention
-    # attn_implementation = None
     torch_dtype = torch.float16 if training_args.fp16 else torch.bfloat16
+    
     if args.train_mode == 'qlora':
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -270,6 +262,7 @@ def load_model(args, training_args, cmd_args):
         )
     else:
         quantization_config = None
+        
     model_kwargs = dict(
         trust_remote_code=cmd_args.trust_remote_code,
         # attn_implementation="flash_attention_2",
@@ -290,13 +283,15 @@ def load_model(args, training_args, cmd_args):
             module.init_parameters()
     logger.info("Init DimDownLayers' params again!!")
 
-    # moe模型，需要考虑负载均衡的loss
+    # moe
     if 'output_router_logits' in model.config.to_dict():
         logger.info('set output_router_logits as True')
         model.config.output_router_logits = True
+        
     # QLoRA: casts all the non int8 modules to full precision (fp32) for stability
     if args.train_mode == 'qlora' and args.task_type in ['pretrain', 'sft']:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
+        
     # LoRA: Enables the gradients for the input embeddings
     if args.train_mode == 'lora' and args.task_type in ['pretrain', 'sft']:
         # For backward compatibility
@@ -311,7 +306,6 @@ def load_model(args, training_args, cmd_args):
     if args.train_mode == 'full':
         peft_config = None
     else:
-        # 找到所有需要插入adapter的全连接层
         target_modules = find_all_linear_names(model, args.train_mode)
         peft_config = LoraConfig(
             r=args.lora_rank,
@@ -343,11 +337,9 @@ def load_model(args, training_args, cmd_args):
     # init ref_model
     if args.task_type == 'dpo':
         ref_model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs) if args.train_mode == 'full' else None
-    # pretrain和sft，不需要ref_model
     else:
         ref_model = None
 
-    # 计算模型参数量
     total = sum(p.numel() for p in model.parameters())
     logger.info("Total model params: %.2fM" % (total / 1e6))
 

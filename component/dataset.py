@@ -99,14 +99,13 @@ class JsonSFTDataset(Dataset):
         return len(self.data_list)
 
     def __getitem__(self, index):
-        # 每条数据拼接格式为: {system_format}{user_format}{assistant_format}{user_format}{assistant_format}...
+        # {system_format}{user_format}{assistant_format}{user_format}{assistant_format}...
         data = self.data_list[index]
         input_ids, target_mask = [], []
 
         # setting system information
         if self.system_format is not None:
             system = data['system'].strip() if 'system' in data.keys() else self.system
-            # system信息不为空
             if system is not None:
                 system_text = self.system_format.format(content=system)
                 input_ids = self.tokenizer.encode(system_text, add_special_tokens=False)
@@ -125,7 +124,7 @@ class JsonSFTDataset(Dataset):
         target_mask += [0] * len(input_tokens) + [1] * len(output_tokens)
 
         assert len(input_ids) == len(target_mask)
-        # 对长度进行截断
+
         input_ids = input_ids[:self.max_seq_length]
         target_mask = target_mask[:self.max_seq_length]
         attention_mask = [1] * len(input_ids)
