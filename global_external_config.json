@@ -1,0 +1,7 @@
+{
+    "ft_mode": "dimdown",
+    "global_step": 10000,
+    "dimdown_dim": 3072,
+    "trainable_mask": true,
+    "identity_loss": true
+}

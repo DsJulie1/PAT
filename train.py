@@ -250,9 +250,6 @@ def load_tokenizer(args):
 
 
 def load_model(args, training_args, cmd_args):
-    """
-    加载模型
-    """
     assert training_args.bf16 or training_args.fp16, 'bf16 or fp16 should be True'
     logger.info(f'Loading model from base model: {args.model_name_or_path}')
     logger.info(f'Train model with {args.train_mode}')
@@ -394,21 +391,16 @@ def load_dpo_dataset(args, tokenizer):
 
 
 def init_components(args, training_args, cmd_args):
-    """
-    初始化各个组件
-    """
     training_args.ddp_find_unused_parameters = False
     logger.info('Initializing components...')
 
-    # 加载tokenizer
     tokenizer = load_tokenizer(args)
-    # 加载model
+
     components = load_model(args, training_args, cmd_args)
     model = components['model']
     ref_model = components['ref_model']
     peft_config = components['peft_config']
 
-    # 初始化dataset和collator
     if args.task_type == 'pretrain':
         logger.info('Train model with pretrain task')
         train_dataset = load_pretrain_dataset(training_args, args, tokenizer)
@@ -447,19 +439,15 @@ def init_components(args, training_args, cmd_args):
 
 
 def main():
-    # 进行一些配置和检查
     args, training_args, cmd_args = setup_everything()
-    # 加载各种组件
     trainer = init_components(args, training_args, cmd_args)
-    # 开始训练
     logger.info(trainer.model)
     logger.info(f"*** cmd arg *** {sys.argv} ***")
     logger.info("*** starting training ***")
+    
     train_result = trainer.train()
-    # 保存最好的checkpoint
     final_save_path = join(training_args.output_dir)
     trainer.save_model(final_save_path)  # Saves the tokenizer too
-    # 保存训练指标
     metrics = train_result.metrics
     trainer.log_metrics("train", metrics)
     trainer.save_metrics("train", metrics)

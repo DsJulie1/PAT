@@ -11,9 +11,7 @@ class SFTDataCollator(object):
         self.padding_side = padding_side
 
     def __call__(self, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
-        # 找出batch中的最大长度
         lengths = [len(x['input_ids']) for x in batch if x['input_ids'] is not None]
-        # 取出batch中的最大长度，如果超过max_seq_length，则取max_seq_length
         batch_max_len = min(max(lengths), self.max_seq_length)
         # batch_max_len = self.max_seq_length
 

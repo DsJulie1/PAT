@@ -71,9 +71,6 @@ class IntuitionSFTDataset(Dataset):
         return inputs
 
 class JsonSFTDataset(Dataset):
-    """
-    统一的数据处理dataset
-    """
     def __init__(self, file, tokenizer, max_seq_length, template):
         self.tokenizer = tokenizer
         self.template_name = template.template_name
